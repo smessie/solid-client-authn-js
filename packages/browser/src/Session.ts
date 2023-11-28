@@ -102,9 +102,22 @@ export async function silentlyAuthenticate(
   sessionId: string,
   clientAuthn: ClientAuthentication,
   session: Session,
+  url = window.location.href,
 ): Promise<boolean> {
   const storedSessionInfo = await clientAuthn.validateCurrentSession(sessionId);
-  if (storedSessionInfo !== null) {
+  if (storedSessionInfo !== null && storedSessionInfo.redirectUrl) {
+    const currentUrl = new URL(url);
+    const strippedCurrentUrl = currentUrl.origin + currentUrl.pathname;
+    const sessionRedirectUrl = new URL(storedSessionInfo.redirectUrl);
+    const strippedSessionRedirectUrl =
+      sessionRedirectUrl.origin + sessionRedirectUrl.pathname;
+    if (strippedCurrentUrl !== strippedSessionRedirectUrl) {
+      // If the current URL is not the same as the one stored in the session,
+      // it means that session belongs to a different app than the one
+      // starting the login process. This is not supported, so we need to
+      // restart the login process.
+      return false;
+    }
     // It can be really useful to save the user's current browser location,
     // so that we can restore it after completing the silent authentication
     // on incoming redirect. This way, the user is eventually redirected back
@@ -370,6 +383,7 @@ export class Session extends EventEmitter implements IHasSessionEventListener {
           storedSessionId,
           this.clientAuthentication,
           this,
+          url,
         );
         // At this point, we know that the main window will imminently be redirected.
         // However, this redirect is asynchronous and there is no way to halt execution
